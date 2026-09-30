@@ -44,7 +44,8 @@ tasks.withType<JavaCompile> {
 
 tasks.test {
     useJUnitPlatform()
-    testLogging { events("failed", "skipped") }
+    maxHeapSize = "3g"
+    testLogging { events("failed", "skipped"); showStandardStreams = true }
 }
 
 // No third-party code is bundled (JDK + BlueMap only), so a plain jar is the addon jar.

@@ -46,12 +46,16 @@ public final class FakeS3 implements AutoCloseable {
     public final AtomicInteger maxInFlight = new AtomicInteger();
     public final ConcurrentLinkedQueue<String> log = new ConcurrentLinkedQueue<>();
     public final AtomicInteger signatureFailures = new AtomicInteger();
+    /** Two mutating requests for the same key were in flight at the same time (must stay 0). */
+    public final AtomicInteger sameKeyOverlaps = new AtomicInteger();
+    /** Mutating requests in the order they completed processing: "PUT key" / "DELETE key". */
+    public final ConcurrentLinkedQueue<String> mutations = new ConcurrentLinkedQueue<>();
+    private final ConcurrentHashMap<String, AtomicInteger> activeByKey = new ConcurrentHashMap<>();
     private final SigV4Signer verifier = new SigV4Signer(ACCESS_KEY, SECRET_KEY, REGION, "s3");
 
     public volatile long latencyMillis = 0;
     private final Queue<Fault> queuedFaults = new ConcurrentLinkedQueue<>();
     private volatile Predicate<String> faultFilter = r -> true;
-    private final AtomicLong sequence = new AtomicLong();
 
     public FakeS3() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 1024);
@@ -76,6 +80,10 @@ public final class FakeS3 implements AutoCloseable {
         for (int i = 0; i < times; i++) queuedFaults.add(fault);
     }
 
+    public void clearFaults() {
+        queuedFaults.clear();
+    }
+
     public void inject(Fault fault, int times) {
         inject(fault, times, r -> true);
     }
@@ -90,11 +98,23 @@ public final class FakeS3 implements AutoCloseable {
         requestTimesNanos.add(System.nanoTime());
         int now = inFlight.incrementAndGet();
         maxInFlight.accumulateAndGet(now, Math::max);
+        String trackedKey = null;
+        String method = ex.getRequestMethod();
+        if (method.equals("PUT") || method.equals("DELETE")) {
+            String raw = ex.getRequestURI().getRawPath();
+            String prefix = "/" + BUCKET + "/";
+            if (raw.startsWith(prefix)) {
+                trackedKey = decode(raw.substring(prefix.length()));
+                if (activeByKey.computeIfAbsent(trackedKey, k -> new AtomicInteger()).incrementAndGet() > 1)
+                    sameKeyOverlaps.incrementAndGet();
+            }
+        }
         try {
             process(ex);
         } catch (RuntimeException e) {
             respond(ex, 500, xmlError("InternalError", e.toString()));
         } finally {
+            if (trackedKey != null) activeByKey.get(trackedKey).decrementAndGet();
             inFlight.decrementAndGet();
             ex.close();
         }
@@ -134,6 +154,7 @@ public final class FakeS3 implements AutoCloseable {
 
         switch (method) {
             case "PUT" -> {
+                mutations.add("PUT " + key);
                 objects.put(key, new StoredObject(body, ex.getRequestHeaders().getFirst("Content-Type"),
                         ex.getRequestHeaders().getFirst("Cache-Control")));
                 respond(ex, 200, new byte[0]);
@@ -149,6 +170,7 @@ public final class FakeS3 implements AutoCloseable {
                 ex.sendResponseHeaders(o == null ? 404 : 200, -1);
             }
             case "DELETE" -> {
+                mutations.add("DELETE " + key);
                 objects.remove(key);
                 ex.sendResponseHeaders(204, -1);
             }

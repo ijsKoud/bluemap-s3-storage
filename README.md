@@ -3,8 +3,8 @@
 High-throughput S3 storage addon for [BlueMap](https://github.com/BlueMap-Minecraft/BlueMap),
 written for Hetzner Object Storage (Ceph RGW). Storage type key: `klrnbk-bluemap:s3`.
 
-**Status: phase 3 (synchronous storage).** One PUT per tile write, one GET per read, render state
-on local disk. The write-behind queue, spool, metrics and full docs follow in later phases.
+**Status: phase 4.** Tile writes return immediately (write-behind queue with a local spool), reads are
+one GET, render state is on local disk. Metrics log, full docs and CI follow in phase 5.
 
 ## Install
 

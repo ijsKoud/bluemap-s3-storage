@@ -9,7 +9,8 @@ import de.bluecolored.bluemap.core.util.Key;
 import nl.klrnbk.bluemap.s3.client.S3Client;
 import nl.klrnbk.bluemap.s3.client.S3ClientConfig;
 import nl.klrnbk.bluemap.s3.client.S3Metrics;
-import nl.klrnbk.bluemap.s3.storage.DirectObjectStore;
+import nl.klrnbk.bluemap.s3.queue.WriteBehindConfig;
+import nl.klrnbk.bluemap.s3.queue.WriteBehindObjectStore;
 import nl.klrnbk.bluemap.s3.storage.ObjectKinds;
 import nl.klrnbk.bluemap.s3.storage.S3Storage;
 import org.spongepowered.configurate.objectmapping.ConfigSerializable;
@@ -171,7 +172,16 @@ public class S3StorageConfig extends StorageConfig {
         S3Client client = new S3Client(clientConfig(), new S3Metrics());
         KeyLayout layout = keyLayout();
         Compression compression = getCompression();
-        return new S3Storage(client, new DirectObjectStore(client), layout, compression,
+        WriteBehindObjectStore objects;
+        try {
+            objects = new WriteBehindObjectStore(client, new WriteBehindConfig(uploadThreads, writeBufferMaxBytes,
+                    writeBufferMaxEntries, spoolEnabled, Path.of(spoolPath), spoolMaxBytes,
+                    Duration.ofSeconds(shutdownFlushTimeoutSeconds), Duration.ofSeconds(30)));
+        } catch (java.io.IOException e) {
+            client.close();
+            throw new ConfigurationException("Could not start the S3 write queue: " + e.getMessage(), e);
+        }
+        return new S3Storage(client, objects, layout, compression,
                 new ObjectKinds(tileCacheControl, metaCacheControl), Path.of(renderStatePath), listCacheTtlSeconds);
     }
 
