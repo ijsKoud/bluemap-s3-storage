@@ -25,6 +25,22 @@ render-state-path: "bluemap/rstate-s3"
 
 3. Point the maps at that storage (`storage: "<name>"` in the map config) and restart.
 
+## Thread settings
+
+Two settings matter for speed, in two different files:
+
+| Setting | File | Recommended (server limited to ~12 cores) |
+|---|---|---|
+| `render-thread-count` | BlueMap's own `plugins/BlueMap/core.conf` | `8` (at most 10). Keep it at or below the cores available to the server, minus 2 to 4 for the game, GC and network. |
+| `upload-threads` | the storage `.conf` of this addon | `32` (default `16`) |
+| `max-in-flight-requests` | the storage `.conf` of this addon | `48`, keep it at or above `upload-threads` |
+| `max-requests-per-second` | the storage `.conf` of this addon | `600` (Hetzner allows 750 per bucket and per IP) |
+
+Upload threads mostly wait on the network and use little CPU. The upload rate is roughly
+`upload-threads / PUT latency`: at 40 to 60 ms per PUT, 24 to 36 threads are enough to reach 600
+requests/s. If BlueMap produces far fewer writes than that, the default 16 is already enough.
+Restart BlueMap after changing either file.
+
 ## Render state must be persistent
 
 BlueMap's render state (`rstate`) lives on local disk in `render-state-path`, not in the bucket.
