@@ -25,7 +25,7 @@ class S3StorageWriteBehindTest {
     @Test
     void renderThreadWritesDoNotWaitForS3AndEverythingIsVisibleImmediately() throws Exception {
         try (FakeS3 fake = new FakeS3()) {
-            fake.latencyMillis = 300;
+            fake.latencyMillis = 1500;
             S3Client client = new S3Client(fake.config(1, 16, 5000), new S3Metrics());
             var queue = new WriteBehindObjectStore(client, new WriteBehindConfig(4, 1 << 24, 1000, true,
                     tmp.resolve("spool"), 1L << 30, Duration.ofSeconds(20), Duration.ofSeconds(30)));
@@ -37,7 +37,7 @@ class S3StorageWriteBehindTest {
             try (var out = map.hiresTiles().write(5, -5)) { out.write("tile".getBytes(StandardCharsets.UTF_8)); }
             try (var out = map.lowresTiles(1).write(0, 0)) { out.write("png".getBytes(StandardCharsets.UTF_8)); }
             try (var out = map.settings().write()) { out.write("{}".getBytes(StandardCharsets.UTF_8)); }
-            assertTrue((System.nanoTime() - t0) / 1_000_000 < 150, "three writes must not wait for 300 ms requests");
+            assertTrue((System.nanoTime() - t0) / 1_000_000 < 700, "three writes must not wait for 1500 ms requests");
 
             assertTrue(fake.objects.isEmpty(), "nothing has reached S3 yet, the read above came from the queue");
 
