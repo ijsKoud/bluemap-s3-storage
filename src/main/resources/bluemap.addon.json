@@ -1,0 +1,4 @@
+{
+  "id": "klrnbk-s3-storage",
+  "entrypoint": "nl.klrnbk.bluemap.s3.S3StorageAddon"
+}
