@@ -6,8 +6,17 @@ import de.bluecolored.bluemap.common.debug.DebugDump;
 import de.bluecolored.bluemap.core.storage.Storage;
 import de.bluecolored.bluemap.core.storage.compression.Compression;
 import de.bluecolored.bluemap.core.util.Key;
+import nl.klrnbk.bluemap.s3.client.S3Client;
+import nl.klrnbk.bluemap.s3.client.S3ClientConfig;
+import nl.klrnbk.bluemap.s3.client.S3Metrics;
+import nl.klrnbk.bluemap.s3.storage.DirectObjectStore;
+import nl.klrnbk.bluemap.s3.storage.ObjectKinds;
+import nl.klrnbk.bluemap.s3.storage.S3Storage;
 import org.spongepowered.configurate.objectmapping.ConfigSerializable;
 import org.spongepowered.configurate.objectmapping.meta.Comment;
+
+import java.nio.file.Path;
+import java.time.Duration;
 
 /** Configuration of the {@code klrnbk-bluemap:s3} storage type (keys are kebab-case in the file). */
 @SuppressWarnings({"FieldMayBeFinal", "unused"})
@@ -159,8 +168,17 @@ public class S3StorageConfig extends StorageConfig {
     @Override
     public Storage createStorage() throws ConfigurationException {
         validate();
-        // The storage implementation arrives in phase 3.
-        throw new ConfigurationException("S3 storage implementation is not available yet");
+        S3Client client = new S3Client(clientConfig(), new S3Metrics());
+        KeyLayout layout = keyLayout();
+        Compression compression = getCompression();
+        return new S3Storage(client, new DirectObjectStore(client), layout, compression,
+                new ObjectKinds(tileCacheControl, metaCacheControl), Path.of(renderStatePath), listCacheTtlSeconds);
+    }
+
+    public S3ClientConfig clientConfig() {
+        return new S3ClientConfig(endpointUrl, region, bucketName, accessKeyId, secretAccessKey, forcePathStyle,
+                Duration.ofSeconds(connectTimeoutSeconds), Duration.ofSeconds(requestTimeoutSeconds), maxRetries,
+                maxInFlightRequests, maxRequestsPerSecond, Duration.ofMillis(100), Duration.ofSeconds(10));
     }
 
     private static void require(boolean ok, String message) throws ConfigurationException {
