@@ -54,6 +54,24 @@ class S3StorageConfigTest {
     }
 
     @Test
+    void spoolPathAndThreadCountAreConfigurable() throws Exception {
+        S3StorageConfig c = parse("""
+                bucket-name: b
+                access-key-id: a
+                secret-access-key: s
+                upload-threads: 32
+                max-in-flight-requests: 48
+                spool-path: "/data/bluemap/s3-spool"
+                """);
+        assertEquals(32, c.getUploadThreads());
+        assertEquals(48, c.getMaxInFlightRequests());
+        assertEquals("/data/bluemap/s3-spool", c.getSpoolPath());
+        assertTrue(java.nio.file.Path.of(c.getSpoolPath()).isAbsolute());
+        assertEquals("bluemap/s3-spool", parse("bucket-name: b").getSpoolPath()); // default
+        assertDoesNotThrow(c::validate);
+    }
+
+    @Test
     void validationRejectsBadValues() throws Exception {
         S3StorageConfig empty = parse("storage-type: \"klrnbk-bluemap:s3\"");
         assertThrows(ConfigurationException.class, empty::validate); // bucket and keys missing

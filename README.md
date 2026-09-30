@@ -21,7 +21,21 @@ secret-access-key: "..."
 root-path: ""          # "" or "." = bucket root, same as the TheMeinerLP addon
 compression: "gzip"
 render-state-path: "bluemap/rstate-s3"
+
+# Upload tuning (see "Thread settings" below)
+upload-threads: 32             # default 16, parallel background uploads
+max-in-flight-requests: 48     # default 32, cap on all concurrent requests, keep >= upload-threads
+max-requests-per-second: 600   # default 600
+
+# Write-behind buffer and crash spool
+spool-enabled: true            # keep acknowledged writes on local disk until they are uploaded
+spool-path: "bluemap/s3-spool" # any directory, relative to the server working dir or absolute
+spool-max-bytes: 2147483648    # beyond this, writes are memory-only (with a warning)
 ```
+
+`spool-path` and `render-state-path` may be absolute (for example `/data/bluemap/s3-spool`) to put
+them on a specific disk. The spool should be on fast local storage such as NVMe: every write goes
+there before it is acknowledged.
 
 3. Point the maps at that storage (`storage: "<name>"` in the map config) and restart.
 
