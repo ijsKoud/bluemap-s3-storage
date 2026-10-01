@@ -79,3 +79,17 @@ in `WebappConfig`.
 
 1. `Storage.initialize()` exists; 2. `regionState()` exists; 3. render-state file names/layout as above;
 4. Maven artifacts for 5.28 are not published.
+
+## Outcome (final)
+
+- The addon compiles against BlueMap 5.3 (`BlueMapCore`/`BlueMapCommon`, plus `BlueMapAPI` 2.7.2 pinned by hand because
+  the 5.3 POM leaves its version empty) and implements the 5.28 interfaces completely: `Storage.initialize()`,
+  `MapStorage.regionState()` (without `@Override`, it does not exist in 5.3) and the `rstate/regions/` grid.
+- The addon entrypoint is `nl.klrnbk.minecraft.plugins.bluemap.addon.s3.S3StorageAddon`, registered in
+  `bluemap.addon.json`, and it registers the storage type `klrnbk-bluemap:s3`.
+- Local render state uses the addon's own `LocalFileGrid` with BlueMap's `rstate` file layout, because
+  `FileGridStorage` is package-private in 5.3.
+- BlueMap behaviour that shaped the design: `LowresLayer.createTile()` reads storage on the render thread and
+  continues with an empty tile when the read fails; `CellStorage` is synchronized around storage calls;
+  `plugin.conf` writes live players and markers to storage only when `write-players-interval` or
+  `write-markers-interval` is above 0 (default 0).

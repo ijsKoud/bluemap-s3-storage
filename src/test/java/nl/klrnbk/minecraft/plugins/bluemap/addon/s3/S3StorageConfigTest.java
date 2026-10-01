@@ -75,6 +75,24 @@ class S3StorageConfigTest {
     }
 
     @Test
+    void unknownKeysOfTheOldAddonAreIgnored() throws Exception {
+        // keys that only the TheMeinerLP addon knows must not break a migrated config
+        S3StorageConfig c = parse("""
+                storage-type: "klrnbk-bluemap:s3"
+                bucket-name: "b"
+                access-key-id: "a"
+                secret-access-key: "s"
+                checksum-validation: "when_required"
+                provider: ""
+                account-id: ""
+                root-path: "."
+                """);
+        assertEquals("b", c.getBucketName());
+        assertEquals("", c.keyLayout().rootPrefix());
+        assertDoesNotThrow(c::validate);
+    }
+
+    @Test
     void logSettings() throws Exception {
         S3StorageConfig c = parse("""
                 bucket-name: b
