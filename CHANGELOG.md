@@ -7,3 +7,4 @@
 - Phase 3: synchronous storage (single PUT/GET), local render state with one-time import, semantics tests.
 - Phase 4: write-behind queue (coalescing, per-key ordering, backpressure), crash-safe spool with replay,
   failure policy with periodic retry, throughput test (producers at 1.6% of the synchronous time).
+- Metrics: one INFO line per interval with interval rates, latency percentiles, queue, retries and producer blocked time.

@@ -9,6 +9,7 @@ import de.bluecolored.bluemap.core.util.Key;
 import nl.klrnbk.bluemap.s3.client.S3Client;
 import nl.klrnbk.bluemap.s3.client.S3ClientConfig;
 import nl.klrnbk.bluemap.s3.client.S3Metrics;
+import nl.klrnbk.bluemap.s3.metrics.MetricsReporter;
 import nl.klrnbk.bluemap.s3.queue.WriteBehindConfig;
 import nl.klrnbk.bluemap.s3.queue.WriteBehindObjectStore;
 import nl.klrnbk.bluemap.s3.storage.ObjectKinds;
@@ -181,8 +182,10 @@ public class S3StorageConfig extends StorageConfig {
             client.close();
             throw new ConfigurationException("Could not start the S3 write queue: " + e.getMessage(), e);
         }
+        MetricsReporter reporter = metricsLogIntervalSeconds > 0
+                ? new MetricsReporter(client.metrics(), client.gate(), objects::stats, metricsLogIntervalSeconds) : null;
         return new S3Storage(client, objects, layout, compression,
-                new ObjectKinds(tileCacheControl, metaCacheControl), Path.of(renderStatePath), listCacheTtlSeconds);
+                new ObjectKinds(tileCacheControl, metaCacheControl), Path.of(renderStatePath), listCacheTtlSeconds, reporter);
     }
 
     public S3ClientConfig clientConfig() {

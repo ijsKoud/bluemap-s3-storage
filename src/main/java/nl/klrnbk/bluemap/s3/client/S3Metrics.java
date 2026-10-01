@@ -49,14 +49,26 @@ public final class S3Metrics {
 
     /** Approximate percentile (upper bound of the log2 bucket) in milliseconds, 0 if no samples. */
     public double percentileMillis(Op op, double p) {
-        long total = count(op);
+        return percentileMillis(buckets(op), p);
+    }
+
+    /** Copy of the latency histogram of an operation; diff two copies to get an interval. */
+    public long[] buckets(Op op) {
+        long[] copy = new long[BUCKETS];
+        for (int b = 0; b < BUCKETS; b++) copy[b] = histogram[op.ordinal()][b].sum();
+        return copy;
+    }
+
+    public static double percentileMillis(long[] buckets, double p) {
+        long total = 0;
+        for (long c : buckets) total += c;
         if (total == 0) return 0;
         long target = (long) Math.ceil(total * p);
         long seen = 0;
-        for (int b = 0; b < BUCKETS; b++) {
-            seen += histogram[op.ordinal()][b].sum();
+        for (int b = 0; b < buckets.length; b++) {
+            seen += buckets[b];
             if (seen >= target) return (1L << (b + 1)) / 1000.0;
         }
-        return (1L << BUCKETS) / 1000.0;
+        return (1L << buckets.length) / 1000.0;
     }
 }

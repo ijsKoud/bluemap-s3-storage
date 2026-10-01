@@ -33,8 +33,17 @@ public final class S3Storage implements Storage {
     private record MapIdSnapshot(List<String> ids, long takenNanos) {}
     private volatile MapIdSnapshot mapIdCache;
 
+    private final AutoCloseable extra;
+
     public S3Storage(S3Client client, ObjectStore objects, KeyLayout layout, Compression compression,
                      ObjectKinds kinds, Path renderStateRoot, int listCacheTtlSeconds) {
+        this(client, objects, layout, compression, kinds, renderStateRoot, listCacheTtlSeconds, null);
+    }
+
+    /** @param extra closed after the pending writes were flushed and before the HTTP client closes (e.g. the metrics reporter) */
+    public S3Storage(S3Client client, ObjectStore objects, KeyLayout layout, Compression compression,
+                     ObjectKinds kinds, Path renderStateRoot, int listCacheTtlSeconds, AutoCloseable extra) {
+        this.extra = extra;
         this.client = client;
         this.objects = objects;
         this.layout = layout;
@@ -102,7 +111,13 @@ public final class S3Storage implements Storage {
         try {
             objects.close();
         } finally {
-            client.close();
+            try {
+                if (extra != null) extra.close();
+            } catch (Exception e) {
+                Logger.global.logWarning("S3 storage: closing the metrics reporter failed: " + e);
+            } finally {
+                client.close();
+            }
         }
         Logger.global.logInfo("S3 storage closed");
     }

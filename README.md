@@ -55,6 +55,23 @@ Upload threads mostly wait on the network and use little CPU. The upload rate is
 requests/s. If BlueMap produces far fewer writes than that, the default 16 is already enough.
 Restart BlueMap after changing either file.
 
+## Reading the metrics line
+
+Every `metrics-log-interval-seconds` (default 30, `0` = off) one INFO line is logged. Rates and
+latencies are for the last interval only:
+
+```
+S3 30s: queue=120 entries/5.0MB inflight=12 uploading=11 | PUT 210.3/s p50/p95/p99=32/64/128ms | GET 3.1/s p50/p95/p99=16/32/32ms | retries=+2 failedUploads=+0 failedOps=0 | spool=2.0MB coalesced=+12 blocked=+0ms (total 0ms)
+```
+
+- `blocked=+Xms`: time render threads waited for buffer space in this interval. **Above zero means uploads
+  are slower than rendering, so the render speed is now set by the upload speed.** Raise `upload-threads`
+  (and `max-in-flight-requests`), or check the latency and retries next to it.
+- `queue`: what is waiting to upload. Growing over several lines means uploads cannot keep up.
+- `PUT p50/p95/p99`: upload latency. Throughput is roughly `upload-threads / latency`.
+- `retries` and `failedUploads`: throttling or errors from the bucket. `failedOps` are writes kept in the
+  spool and retried every 30 s.
+
 ## Render state must be persistent
 
 BlueMap's render state (`rstate`) lives on local disk in `render-state-path`, not in the bucket.
