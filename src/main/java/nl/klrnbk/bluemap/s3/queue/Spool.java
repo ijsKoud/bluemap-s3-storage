@@ -1,6 +1,6 @@
 package nl.klrnbk.bluemap.s3.queue;
 
-import de.bluecolored.bluemap.core.logger.Logger;
+import nl.klrnbk.bluemap.s3.log.AddonLog;
 import nl.klrnbk.bluemap.s3.storage.ObjectMeta;
 
 import java.io.IOException;
@@ -92,7 +92,7 @@ final class Spool {
         try {
             if (Files.deleteIfExists(file)) bytes.addAndGet(-op.spoolSize);
         } catch (IOException e) {
-            Logger.global.logWarning("S3 spool: could not delete " + file.getFileName() + ": " + e);
+            AddonLog.warn("S3 spool: could not delete " + file.getFileName() + ": " + e);
         }
     }
 
@@ -127,7 +127,7 @@ final class Spool {
                 bytes.addAndGet(op.spoolSize);
                 ops.add(op);
             } catch (IOException | RuntimeException e) {
-                Logger.global.logWarning("S3 spool: ignoring unreadable spool file " + name + ": " + e);
+                AddonLog.warn("S3 spool: ignoring unreadable spool file " + name + ": " + e);
                 Files.move(file, dir.resolve(name + ".corrupt"), StandardCopyOption.REPLACE_EXISTING);
             }
         }

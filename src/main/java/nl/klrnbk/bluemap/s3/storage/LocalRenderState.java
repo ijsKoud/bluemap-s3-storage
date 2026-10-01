@@ -1,6 +1,6 @@
 package nl.klrnbk.bluemap.s3.storage;
 
-import de.bluecolored.bluemap.core.logger.Logger;
+import nl.klrnbk.bluemap.s3.log.AddonLog;
 import de.bluecolored.bluemap.core.storage.GridStorage;
 import de.bluecolored.bluemap.core.storage.ItemStorage;
 import de.bluecolored.bluemap.core.storage.compression.CompressedInputStream;
@@ -96,7 +96,7 @@ public final class LocalRenderState {
     }
 
     private void importFromBucket() throws IOException {
-        Logger.global.logInfo("S3 storage: importing render state from '" + remotePrefix + "' to " + root);
+        AddonLog.info("S3 storage: importing render state from '" + remotePrefix + "' to " + root);
         Files.createDirectories(root);
         List<String> keys = new ArrayList<>();
         client.listAll(remotePrefix, key -> {
@@ -129,7 +129,7 @@ public final class LocalRenderState {
             pool.shutdownNow();
         }
         Files.createFile(marker);
-        Logger.global.logInfo("S3 storage: render state import done (" + imported + " imported, " + skipped
+        AddonLog.info("S3 storage: render state import done (" + imported + " imported, " + skipped
                 + " already present). Render state is now local at " + root);
     }
 

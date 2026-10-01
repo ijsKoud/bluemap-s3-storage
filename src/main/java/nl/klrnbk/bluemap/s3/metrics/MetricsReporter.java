@@ -1,6 +1,6 @@
 package nl.klrnbk.bluemap.s3.metrics;
 
-import de.bluecolored.bluemap.core.logger.Logger;
+import nl.klrnbk.bluemap.s3.log.AddonLog;
 import nl.klrnbk.bluemap.s3.client.RequestGate;
 import nl.klrnbk.bluemap.s3.client.S3Metrics;
 import nl.klrnbk.bluemap.s3.queue.WriteBehindStats;
@@ -55,9 +55,9 @@ public final class MetricsReporter implements AutoCloseable {
 
     private void logOnce() {
         try {
-            Logger.global.logInfo(nextLine());
+            AddonLog.info(nextLine());
         } catch (RuntimeException e) {
-            Logger.global.logWarning("S3 metrics line failed: " + e);
+            AddonLog.warn("S3 metrics line failed: " + e);
         }
     }
 

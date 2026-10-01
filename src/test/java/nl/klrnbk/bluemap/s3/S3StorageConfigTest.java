@@ -75,6 +75,41 @@ class S3StorageConfigTest {
     }
 
     @Test
+    void logSettings() throws Exception {
+        S3StorageConfig c = parse("""
+                bucket-name: b
+                access-key-id: a
+                secret-access-key: s
+                log-file: "bluemap/s3-storage.log"
+                console-log-level: "warn"
+                log-file-max-bytes: 2048
+                log-file-keep: 5
+                """);
+        assertEquals("bluemap/s3-storage.log", c.getLogFile());
+        assertEquals("warn", c.getConsoleLogLevel());
+        assertEquals(5, c.getLogFileKeep());
+        assertDoesNotThrow(c::validate);
+        S3StorageConfig defaults = parse("bucket-name: b");
+        assertEquals("", defaults.getLogFile());
+        assertEquals("info", defaults.getConsoleLogLevel());
+        // console off without a file would swallow errors
+        S3StorageConfig off = parse("""
+                bucket-name: b
+                access-key-id: a
+                secret-access-key: s
+                console-log-level: "off"
+                """);
+        assertThrows(ConfigurationException.class, off::validate);
+        S3StorageConfig bad = parse("""
+                bucket-name: b
+                access-key-id: a
+                secret-access-key: s
+                console-log-level: "loud"
+                """);
+        assertThrows(ConfigurationException.class, bad::validate);
+    }
+
+    @Test
     void validationRejectsBadValues() throws Exception {
         S3StorageConfig empty = parse("storage-type: \"klrnbk-bluemap:s3\"");
         assertThrows(ConfigurationException.class, empty::validate); // bucket and keys missing

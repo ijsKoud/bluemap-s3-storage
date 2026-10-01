@@ -1,6 +1,6 @@
 package nl.klrnbk.bluemap.s3.queue;
 
-import de.bluecolored.bluemap.core.logger.Logger;
+import nl.klrnbk.bluemap.s3.log.AddonLog;
 import nl.klrnbk.bluemap.s3.client.S3Client;
 import nl.klrnbk.bluemap.s3.storage.DirectObjectStore;
 import nl.klrnbk.bluemap.s3.storage.ObjectMeta;
@@ -155,7 +155,7 @@ public final class WriteBehindObjectStore implements ObjectStore {
     private void replaySpool() throws IOException {
         List<PendingOp> ops = spool.loadAll();
         if (ops.isEmpty()) return;
-        Logger.global.logInfo("S3 spool: replaying " + ops.size() + " pending operations from the previous run");
+        AddonLog.info("S3 spool: replaying " + ops.size() + " pending operations from the previous run");
         long maxSeq = 0;
         for (PendingOp op : ops) maxSeq = Math.max(maxSeq, op.seq);
         sequence.set(maxSeq + 1);
@@ -293,7 +293,7 @@ public final class WriteBehindObjectStore implements ObjectStore {
                 });
             }
         } catch (RuntimeException e) {
-            Logger.global.logWarning("S3 retry of failed uploads crashed: " + e);
+            AddonLog.warn("S3 retry of failed uploads crashed: " + e);
         }
     }
 
@@ -454,7 +454,7 @@ public final class WriteBehindObjectStore implements ObjectStore {
         long deadline = System.nanoTime() + config.shutdownFlushTimeout().toNanos();
         while (activeEnqueues.get() > 0 && System.nanoTime() < deadline) sleepQuietly(5);
 
-        Logger.global.logInfo("S3 storage: flushing " + pendingKeys() + " pending operations (timeout "
+        AddonLog.info("S3 storage: flushing " + pendingKeys() + " pending operations (timeout "
                 + config.shutdownFlushTimeout().toSeconds() + "s)");
         while (System.nanoTime() < deadline && pendingKeys() > 0) {
             if (onlyFailedLeft()) break; // nothing can make progress, do not wait the full timeout
@@ -481,9 +481,9 @@ public final class WriteBehindObjectStore implements ObjectStore {
             if (latest.spoolFile == null) memoryOnly++;
         }
         if (left == 0) {
-            Logger.global.logInfo("S3 storage: all pending operations flushed");
+            AddonLog.info("S3 storage: all pending operations flushed");
         } else {
-            Logger.global.logWarning("S3 storage: " + left + " operations were left unflushed at shutdown; "
+            AddonLog.warn("S3 storage: " + left + " operations were left unflushed at shutdown; "
                     + (left - memoryOnly) + " remain in the spool and will be uploaded on the next start"
                     + (memoryOnly > 0 ? ", " + memoryOnly + " were memory-only and are LOST" : ""));
         }

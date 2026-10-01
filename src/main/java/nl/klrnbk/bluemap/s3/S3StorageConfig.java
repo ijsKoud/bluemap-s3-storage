@@ -9,6 +9,7 @@ import de.bluecolored.bluemap.core.util.Key;
 import nl.klrnbk.bluemap.s3.client.S3Client;
 import nl.klrnbk.bluemap.s3.client.S3ClientConfig;
 import nl.klrnbk.bluemap.s3.client.S3Metrics;
+import nl.klrnbk.bluemap.s3.log.AddonLog;
 import nl.klrnbk.bluemap.s3.metrics.MetricsReporter;
 import nl.klrnbk.bluemap.s3.queue.WriteBehindConfig;
 import nl.klrnbk.bluemap.s3.queue.WriteBehindObjectStore;
@@ -109,6 +110,23 @@ public class S3StorageConfig extends StorageConfig {
     @Comment("Cache-Control header for settings, textures, markers, players and assets")
     private String metaCacheControl = "no-cache";
 
+    @Comment("""
+            File that receives all log output of this addon (metrics line, upload failures, spool and shutdown
+            messages), relative to the server working dir. Empty means no file.""")
+    private String logFile = "";
+
+    @Comment("""
+            Lowest level printed to the BlueMap console: info, warn, error or off.
+            "warn" keeps the console quiet except for problems. "off" requires log-file to be set.
+            The log file always gets everything.""")
+    private String consoleLogLevel = "info";
+
+    @Comment("Rotate the log file when it reaches this size in bytes")
+    private long logFileMaxBytes = 10_485_760L;
+
+    @Comment("Number of rotated log files to keep (log-file.1 is the newest)")
+    private int logFileKeep = 3;
+
     @Comment("Interval of the metrics log line in seconds, 0 disables it")
     private int metricsLogIntervalSeconds = 30;
 
@@ -139,6 +157,10 @@ public class S3StorageConfig extends StorageConfig {
     public int getShutdownFlushTimeoutSeconds() { return shutdownFlushTimeoutSeconds; }
     public String getTileCacheControl() { return tileCacheControl; }
     public String getMetaCacheControl() { return metaCacheControl; }
+    public String getLogFile() { return logFile; }
+    public String getConsoleLogLevel() { return consoleLogLevel; }
+    public long getLogFileMaxBytes() { return logFileMaxBytes; }
+    public int getLogFileKeep() { return logFileKeep; }
     public int getMetricsLogIntervalSeconds() { return metricsLogIntervalSeconds; }
     public int getListCacheTtlSeconds() { return listCacheTtlSeconds; }
 
@@ -171,6 +193,16 @@ public class S3StorageConfig extends StorageConfig {
         require(listCacheTtlSeconds >= 0, "list-cache-ttl-seconds must be >= 0");
         require(!spoolEnabled || !spoolPath.isBlank(), "spool-path is required when spool-enabled is true");
         getCompression();
+        AddonLog.Level level;
+        try {
+            level = AddonLog.Level.parse(consoleLogLevel);
+        } catch (IllegalArgumentException e) {
+            throw new ConfigurationException("console-log-level must be one of info, warn, error, off");
+        }
+        require(level != AddonLog.Level.OFF || !logFile.isBlank(),
+                "console-log-level off requires log-file, otherwise errors would be lost");
+        require(logFileMaxBytes >= 1024, "log-file-max-bytes must be >= 1024");
+        require(logFileKeep >= 1, "log-file-keep must be >= 1");
         try {
             java.net.URI uri = java.net.URI.create(endpointUrl);
             require(("https".equals(uri.getScheme()) || "http".equals(uri.getScheme())) && uri.getHost() != null,
@@ -187,6 +219,8 @@ public class S3StorageConfig extends StorageConfig {
     @Override
     public Storage createStorage() throws ConfigurationException {
         validate();
+        AddonLog.install(new AddonLog(AddonLog.Level.parse(consoleLogLevel),
+                logFile.isBlank() ? null : Path.of(logFile), logFileMaxBytes, logFileKeep, AddonLog.BLUEMAP_CONSOLE));
         S3Client client = new S3Client(clientConfig(), new S3Metrics());
         KeyLayout layout = keyLayout();
         Compression compression = getCompression();

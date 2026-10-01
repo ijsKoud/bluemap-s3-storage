@@ -1,6 +1,6 @@
 package nl.klrnbk.bluemap.s3.storage;
 
-import de.bluecolored.bluemap.core.logger.Logger;
+import nl.klrnbk.bluemap.s3.log.AddonLog;
 import de.bluecolored.bluemap.core.storage.Storage;
 import de.bluecolored.bluemap.core.storage.compression.Compression;
 import nl.klrnbk.bluemap.s3.KeyLayout;
@@ -114,11 +114,11 @@ public final class S3Storage implements Storage {
             try {
                 if (extra != null) extra.close();
             } catch (Exception e) {
-                Logger.global.logWarning("S3 storage: closing the metrics reporter failed: " + e);
+                AddonLog.warn("S3 storage: closing the metrics reporter failed: " + e);
             } finally {
                 client.close();
             }
         }
-        Logger.global.logInfo("S3 storage closed");
+        AddonLog.info("S3 storage closed");
     }
 }

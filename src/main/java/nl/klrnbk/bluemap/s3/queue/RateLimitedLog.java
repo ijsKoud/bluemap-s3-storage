@@ -1,6 +1,6 @@
 package nl.klrnbk.bluemap.s3.queue;
 
-import de.bluecolored.bluemap.core.logger.Logger;
+import nl.klrnbk.bluemap.s3.log.AddonLog;
 
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -21,7 +21,7 @@ final class RateLimitedLog {
         long last = lastNanos.get();
         if (now - last >= intervalNanos && lastNanos.compareAndSet(last, now)) {
             int skipped = suppressed.getAndSet(0);
-            Logger.global.logWarning(skipped == 0 ? message : message + " (" + skipped + " similar messages suppressed)");
+            AddonLog.warn(skipped == 0 ? message : message + " (" + skipped + " similar messages suppressed)");
         } else {
             suppressed.incrementAndGet();
         }
