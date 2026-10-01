@@ -211,6 +211,18 @@ Stop the server, set `storage-type` back to `themeinerlp:s3`, and start again. T
 the bucket and compatible. The old addon reads render state from the bucket, which is no longer updated by this addon,
 so BlueMap may re-render some tiles that changed since the migration. That costs time but is safe.
 
+## Releases
+
+Every pushed version tag builds the addon and publishes the jar as a GitHub release:
+
+```bash
+git tag v0.1.1
+git push origin v0.1.1
+```
+
+The version in the jar name comes from the tag (`v0.1.1` gives `bluemap-s3-storage-0.1.1.jar`). A tag with a dash,
+such as `v0.2.0-rc1`, is published as a pre-release. Pushes to `main` and pull requests run the build and tests only.
+
 ## Tests
 
 ```bash
