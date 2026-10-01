@@ -19,11 +19,14 @@ class MetricsReporterTest {
         try (MetricsReporter r = new MetricsReporter(metrics, new RequestGate(8, 100), stats::get, 3600)) {
             for (int i = 0; i < 100; i++) metrics.record(S3Metrics.Op.PUT, 40_000_000L, true); // 40 ms
             metrics.retry();
+            metrics.timeout();
+            metrics.timeout();
+            metrics.ioError();
             stats.set(new WriteBehindStats(300, 9 * 1048576L, 12, 100, 5, 2, 1, 3 * 1048576L, 2_500_000_000L));
             String first = r.nextLine();
             assertTrue(first.contains("queue=300 entries/9.0MB"), first);
             assertTrue(first.contains("PUT "), first);
-            assertTrue(first.contains("retries=+1"), first);
+            assertTrue(first.contains("retries=+1 timeouts=+2 ioErrors=+1"), first);
             assertTrue(first.contains("failedUploads=+2 failedOps=1"), first);
             assertTrue(first.contains("blocked=+2500ms (total 2500ms)"), first);
             assertTrue(first.contains("spool=3.0MB"), first);

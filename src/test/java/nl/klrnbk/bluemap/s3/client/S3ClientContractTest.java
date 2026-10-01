@@ -135,6 +135,22 @@ class S3ClientContractTest {
     }
 
     @Test
+    void readsUseTheShorterReadTimeoutAndAreCounted() throws Exception {
+        var cfg = fake.config(2, 4, 1000);
+        try (S3Client c = new S3Client(new S3ClientConfig(cfg.endpointUrl(), cfg.region(), cfg.bucket(), cfg.accessKeyId(),
+                cfg.secretAccessKey(), true, cfg.connectTimeout(), Duration.ofSeconds(5), Duration.ofMillis(300), 2, 4, 1000,
+                cfg.backoffBase(), cfg.backoffCap()), new S3Metrics())) {
+            fake.objects.put("k", new FakeS3.StoredObject(bytes("v"), null, null));
+            fake.inject(FakeS3.Fault.hang(2000), 1);
+            long t0 = System.nanoTime();
+            assertArrayEquals(bytes("v"), c.get("k")); // first attempt hangs, read timeout 300 ms, retry succeeds
+            assertTrue((System.nanoTime() - t0) / 1_000_000 < 1500, "read must not wait for the 5 s write timeout");
+            assertEquals(1, c.metrics().timeouts());
+            assertEquals(0, c.metrics().ioErrors());
+        }
+    }
+
+    @Test
     void listPaginatesAndSupportsDelimiter() throws IOException {
         for (int i = 0; i < 25; i++) fake.objects.put(String.format("root/w/tiles/0/k%02d", i), new FakeS3.StoredObject(new byte[1], null, null));
         fake.objects.put("root/w/settings.json", new FakeS3.StoredObject(new byte[1], null, null));

@@ -32,6 +32,8 @@ public final class MetricsReporter implements AutoCloseable {
     private final long[][] lastBuckets = new long[S3Metrics.Op.values().length][];
     private final long[] lastCounts = new long[S3Metrics.Op.values().length];
     private long lastRetries;
+    private long lastTimeouts;
+    private long lastIoErrors;
     private long lastFailures;
     private long lastBlockedNanos;
     private long lastCoalesced;
@@ -87,10 +89,16 @@ public final class MetricsReporter implements AutoCloseable {
 
         long retries = metrics.retries();
         long failures = s.failedUploads();
+        long timeouts = metrics.timeouts();
+        long ioErrors = metrics.ioErrors();
         sb.append(" | retries=+").append(retries - lastRetries)
+                .append(" timeouts=+").append(timeouts - lastTimeouts)
+                .append(" ioErrors=+").append(ioErrors - lastIoErrors)
                 .append(" failedUploads=+").append(failures - lastFailures)
                 .append(" failedOps=").append(s.failedOpsPending());
         lastRetries = retries;
+        lastTimeouts = timeouts;
+        lastIoErrors = ioErrors;
         lastFailures = failures;
 
         long blocked = s.producerBlockedNanos();

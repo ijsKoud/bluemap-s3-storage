@@ -204,7 +204,8 @@ public final class S3Client implements AutoCloseable {
                 throw new InterruptedIOException("Interrupted while waiting for a request slot");
             }
             try {
-                HttpRequest request = buildRequest(method, canonicalPath, query, payload, payloadHash, extraHeaders, body != null);
+                HttpRequest request = buildRequest(method, canonicalPath, query, payload, payloadHash, extraHeaders, body != null,
+                        kind == RequestGate.Kind.READ ? config.readTimeout() : config.requestTimeout());
                 HttpResponse<byte[]> response = http.send(request, HttpResponse.BodyHandlers.ofByteArray());
                 int status = response.statusCode();
                 byte[] responseBody = response.body();
@@ -225,6 +226,8 @@ public final class S3Client implements AutoCloseable {
             } catch (S3Exception e) {
                 throw e;
             } catch (IOException e) {
+                if (e instanceof java.net.http.HttpTimeoutException) metrics.timeout();
+                else metrics.ioError();
                 last = new S3Exception(method + " " + shorten(key) + " failed: " + e.getClass().getSimpleName()
                         + (e.getMessage() == null ? "" : ": " + e.getMessage()), e);
             } finally {
@@ -238,7 +241,7 @@ public final class S3Client implements AutoCloseable {
     }
 
     private HttpRequest buildRequest(String method, String canonicalPath, Map<String, String> query, byte[] payload,
-                                     String payloadHash, Map<String, String> extraHeaders, boolean hasBody) {
+                                     String payloadHash, Map<String, String> extraHeaders, boolean hasBody, java.time.Duration timeout) {
         Instant now = Instant.now();
         Map<String, String> signed = new TreeMap<>();
         signed.put("host", authority);
@@ -251,7 +254,7 @@ public final class S3Client implements AutoCloseable {
         URI uri = URI.create(endpoint.getScheme() + "://" + authority + canonicalPath
                 + (queryString.isEmpty() ? "" : "?" + queryString));
         HttpRequest.Builder b = HttpRequest.newBuilder(uri)
-                .timeout(config.requestTimeout())
+                .timeout(timeout)
                 .method(method, hasBody ? HttpRequest.BodyPublishers.ofByteArray(payload) : HttpRequest.BodyPublishers.noBody());
         // The JDK client sets Host itself from the URI; it matches the signed value by construction.
         signed.forEach((k, v) -> {

@@ -13,6 +13,8 @@ public final class S3Metrics {
     private final LongAdder[] count = new LongAdder[Op.values().length];
     private final LongAdder[] failures = new LongAdder[Op.values().length];
     private final LongAdder retries = new LongAdder();
+    private final LongAdder timeouts = new LongAdder();
+    private final LongAdder ioErrors = new LongAdder();
 
     public S3Metrics() {
         for (int i = 0; i < Op.values().length; i++) {
@@ -33,6 +35,24 @@ public final class S3Metrics {
 
     public void retry() {
         retries.increment();
+    }
+
+    /** A single attempt hit its timeout (connection or response did not arrive in time). */
+    public void timeout() {
+        timeouts.increment();
+    }
+
+    /** A single attempt failed with a connection level error other than a timeout. */
+    public void ioError() {
+        ioErrors.increment();
+    }
+
+    public long timeouts() {
+        return timeouts.sum();
+    }
+
+    public long ioErrors() {
+        return ioErrors.sum();
     }
 
     public long count(Op op) {

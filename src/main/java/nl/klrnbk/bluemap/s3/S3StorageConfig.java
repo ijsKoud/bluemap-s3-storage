@@ -78,8 +78,13 @@ public class S3StorageConfig extends StorageConfig {
     @Comment("Maximum spool size in bytes; beyond it writes are memory-only (with a warning)")
     private long spoolMaxBytes = 2_147_483_648L;
 
-    @Comment("Per-request timeout in seconds")
-    private int requestTimeoutSeconds = 30;
+    @Comment("Timeout of one upload or delete attempt in seconds. A hung attempt is retried on a new connection.")
+    private int requestTimeoutSeconds = 15;
+
+    @Comment("""
+            Timeout of one read attempt (GET, HEAD, list) in seconds. Reads can block BlueMap render threads
+            (e.g. loading a lowres tile), so this is short: a hung read is retried instead of stalling a thread.""")
+    private int readTimeoutSeconds = 5;
 
     @Comment("Connect timeout in seconds")
     private int connectTimeoutSeconds = 10;
@@ -119,6 +124,7 @@ public class S3StorageConfig extends StorageConfig {
     public String getSpoolPath() { return spoolPath; }
     public long getSpoolMaxBytes() { return spoolMaxBytes; }
     public int getRequestTimeoutSeconds() { return requestTimeoutSeconds; }
+    public int getReadTimeoutSeconds() { return readTimeoutSeconds; }
     public int getConnectTimeoutSeconds() { return connectTimeoutSeconds; }
     public int getMaxRetries() { return maxRetries; }
     public int getShutdownFlushTimeoutSeconds() { return shutdownFlushTimeoutSeconds; }
@@ -147,6 +153,7 @@ public class S3StorageConfig extends StorageConfig {
         require(writeBufferMaxBytes >= 1, "write-buffer-max-bytes must be >= 1");
         require(writeBufferMaxEntries >= 1, "write-buffer-max-entries must be >= 1");
         require(requestTimeoutSeconds >= 1, "request-timeout-seconds must be >= 1");
+        require(readTimeoutSeconds >= 1, "read-timeout-seconds must be >= 1");
         require(connectTimeoutSeconds >= 1, "connect-timeout-seconds must be >= 1");
         require(maxRetries >= 0, "max-retries must be >= 0");
         require(shutdownFlushTimeoutSeconds >= 0, "shutdown-flush-timeout-seconds must be >= 0");
@@ -190,7 +197,8 @@ public class S3StorageConfig extends StorageConfig {
 
     public S3ClientConfig clientConfig() {
         return new S3ClientConfig(endpointUrl, region, bucketName, accessKeyId, secretAccessKey, forcePathStyle,
-                Duration.ofSeconds(connectTimeoutSeconds), Duration.ofSeconds(requestTimeoutSeconds), maxRetries,
+                Duration.ofSeconds(connectTimeoutSeconds), Duration.ofSeconds(requestTimeoutSeconds),
+                Duration.ofSeconds(readTimeoutSeconds), maxRetries,
                 maxInFlightRequests, maxRequestsPerSecond, Duration.ofMillis(100), Duration.ofSeconds(10));
     }
 

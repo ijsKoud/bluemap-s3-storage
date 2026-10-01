@@ -55,6 +55,19 @@ Upload threads mostly wait on the network and use little CPU. The upload rate is
 requests/s. If BlueMap produces far fewer writes than that, the default 16 is already enough.
 Restart BlueMap after changing either file.
 
+## Timeouts
+
+```hocon
+request-timeout-seconds: 15   # one upload or delete attempt (default 15)
+read-timeout-seconds: 5       # one read attempt: GET, HEAD, list (default 5)
+connect-timeout-seconds: 10
+max-retries: 5
+```
+
+Reads are kept short on purpose: BlueMap loads lowres tiles synchronously on a render thread when they are
+not in its small cache, so a hung read would stall that render thread. A hung attempt is abandoned and
+retried on a new connection instead.
+
 ## Reading the metrics line
 
 Every `metrics-log-interval-seconds` (default 30, `0` = off) one INFO line is logged. Rates and
@@ -69,6 +82,8 @@ S3 30s: queue=120 entries/5.0MB inflight=12 uploading=11 | PUT 210.3/s p50/p95/p
   (and `max-in-flight-requests`), or check the latency and retries next to it.
 - `queue`: what is waiting to upload. Growing over several lines means uploads cannot keep up.
 - `PUT p50/p95/p99`: upload latency. Throughput is roughly `upload-threads / latency`.
+- `timeouts` and `ioErrors`: attempts that hung (no answer within the timeout) or failed at connection level.
+  Timeouts show up as multi-second latency tails: a hung attempt holds an upload thread until it times out.
 - `retries` and `failedUploads`: throttling or errors from the bucket. `failedOps` are writes kept in the
   spool and retried every 30 s.
 
