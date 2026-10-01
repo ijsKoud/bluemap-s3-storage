@@ -39,6 +39,36 @@ there before it is acknowledged.
 
 3. Point the maps at that storage (`storage: "<name>"` in the map config) and restart.
 
+## Cloudflare R2 (and other S3 providers)
+
+```hocon
+storage-type: "klrnbk-bluemap:s3"
+endpoint-url: "https://<ACCOUNT_ID>.r2.cloudflarestorage.com"   # R2 dashboard > bucket > Settings > S3 API
+region: "auto"
+force-path-style: true
+bucket-name: "my-r2-bucket"
+access-key-id: "..."          # R2 > Manage API tokens, permission "Object Read & Write", scoped to the bucket
+secret-access-key: "..."
+root-path: ""
+compression: "gzip"
+render-state-path: "bluemap/rstate-r2"   # use a NEW path per bucket, see below
+spool-path: "bluemap/s3-spool-r2"        # use a NEW path per bucket, see below
+upload-threads: 32
+max-in-flight-requests: 48
+max-requests-per-second: 600
+```
+
+- **Use separate `render-state-path` and `spool-path` for every bucket you try.** The render state lives on
+  local disk and records which tiles are rendered. If you point a new, empty bucket at the render state of an
+  old one, BlueMap believes the tiles exist and skips them, leaving an empty map. A leftover spool from another
+  bucket would replay its writes into the new one.
+- Existing tiles are not copied. Start with an empty bucket (BlueMap renders everything) or copy the objects
+  first, e.g. with `rclone copy hetzner:bucket r2:bucket`, and keep the old `render-state-path` only if the copy
+  includes the `rstate/` objects.
+- R2 bills PUT and LIST as Class A operations (per million). A full render writes at least one object per tile.
+- R2 limits repeated writes to the same object key to about one per second. The queue writes at most one
+  request per key at a time, and coalesces queued writes of the same key, so this normally does not matter.
+
 ## Thread settings
 
 Two settings matter for speed, in two different files:
