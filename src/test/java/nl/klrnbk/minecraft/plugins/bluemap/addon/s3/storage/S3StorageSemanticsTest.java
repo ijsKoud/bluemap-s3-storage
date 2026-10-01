@@ -142,6 +142,43 @@ class S3StorageSemanticsTest {
     }
 
     @Test
+    void identicalSettingsMarkersAndPlayersAreNotWrittenAgain() throws IOException {
+        var map = storage.map("world");
+        for (int i = 0; i < 5; i++) { // BlueMap saves these on every map save with the same content
+            write(map.settings().write(), bytes("{\"a\":1}"));
+            write(map.markers().write(), bytes("{}"));
+            write(map.players().write(), bytes("{}"));
+        }
+        assertEquals(3, fake.mutations.stream().filter(m -> m.startsWith("PUT")).count(), fake.mutations.toString());
+
+        write(map.settings().write(), bytes("{\"a\":2}")); // changed content is written
+        assertEquals(4, fake.mutations.stream().filter(m -> m.startsWith("PUT")).count());
+        assertEquals("{\"a\":2}", new String(fake.data("maps/world/settings.json"), StandardCharsets.UTF_8));
+
+        map.markers().delete(); // after a delete the same content must be written again
+        write(map.markers().write(), bytes("{}"));
+        assertEquals(5, fake.mutations.stream().filter(m -> m.startsWith("PUT")).count());
+        assertNotNull(fake.data("maps/world/live/markers.json"));
+    }
+
+    @Test
+    void tilesAreNeverDeduplicated() throws IOException {
+        var grid = storage.map("world").hiresTiles();
+        for (int i = 0; i < 3; i++) write(grid.write(0, 0), bytes("same"));
+        assertEquals(3, fake.mutations.stream().filter(m -> m.startsWith("PUT")).count());
+    }
+
+    @Test
+    void deletingTheMapForgetsRememberedContent() throws IOException {
+        var map = storage.map("world");
+        write(map.settings().write(), bytes("{}"));
+        map.delete(p -> true);
+        assertNull(fake.data("maps/world/settings.json"));
+        write(map.settings().write(), bytes("{}")); // same content as before the delete
+        assertNotNull(fake.data("maps/world/settings.json"));
+    }
+
+    @Test
     void writeIsVisibleOnlyAfterClose() throws IOException {
         var out = storage.map("world").hiresTiles().write(1, 1);
         out.write(bytes("abc"));

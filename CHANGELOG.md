@@ -16,3 +16,4 @@
 - Phase 5: README rewritten (config reference, migration from TheMeinerLP, rollback, recommended values),
   `docs/web-serving.md` for serving tiles from Cloudflare R2, GitHub Actions workflow, MinIO and real bucket
   integration tests (skipped without Docker or environment variables).
+- Skip writes of identical settings.json, markers.json and players.json (BlueMap rewrites them on every map save), saving billable PUTs.

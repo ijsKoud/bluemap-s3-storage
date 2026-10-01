@@ -30,6 +30,18 @@ public final class S3Storage implements Storage {
     private final Map<String, S3MapStorage> maps = new ConcurrentHashMap<>();
     private volatile boolean closed;
 
+    /**
+     * Last content written for small, frequently rewritten items (settings, markers, players). BlueMap saves
+     * these on every map save, about every 15 s while rendering, with identical content. Skipping the identical
+     * ones saves billable requests. Writes of one key are serialized with a striped lock so the remembered
+     * content always matches the last write that reached the queue.
+     */
+    private final Map<String, byte[]> lastWritten = new ConcurrentHashMap<>();
+    private final Object[] writeLocks = new Object[64];
+    {
+        for (int i = 0; i < writeLocks.length; i++) writeLocks[i] = new Object();
+    }
+
     private record MapIdSnapshot(List<String> ids, long takenNanos) {}
     private volatile MapIdSnapshot mapIdCache;
 
@@ -59,6 +71,23 @@ public final class S3Storage implements Storage {
 
     void ensureOpen() throws IOException {
         if (closed) throw new IOException("S3 storage is closed");
+    }
+
+    Object writeLock(String key) {
+        return writeLocks[(key.hashCode() & 0x7fffffff) % writeLocks.length];
+    }
+
+    boolean unchangedSinceLastWrite(String key, byte[] data) {
+        byte[] previous = lastWritten.get(key);
+        return previous != null && java.util.Arrays.equals(previous, data);
+    }
+
+    void rememberWrite(String key, byte[] data) {
+        lastWritten.put(key, data);
+    }
+
+    void forgetWrites(String keyPrefix) {
+        lastWritten.keySet().removeIf(k -> k.startsWith(keyPrefix));
     }
 
     void invalidateMapIds() {

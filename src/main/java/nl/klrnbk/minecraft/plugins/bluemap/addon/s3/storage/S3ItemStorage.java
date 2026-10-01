@@ -17,8 +17,16 @@ public class S3ItemStorage implements ItemStorage {
     private final Compression compression;
     private final ObjectMeta meta;
     private final Runnable onWritten;
+    private final boolean skipUnchanged;
 
     public S3ItemStorage(S3Storage owner, String key, Compression compression, ObjectMeta meta, Runnable onWritten) {
+        this(owner, key, compression, meta, onWritten, false);
+    }
+
+    /** @param skipUnchanged do not write again when the content equals the last content written by this process */
+    public S3ItemStorage(S3Storage owner, String key, Compression compression, ObjectMeta meta, Runnable onWritten,
+                         boolean skipUnchanged) {
+        this.skipUnchanged = skipUnchanged;
         this.owner = owner;
         this.key = key;
         this.compression = compression;
@@ -47,6 +55,7 @@ public class S3ItemStorage implements ItemStorage {
     @Override
     public void delete() throws IOException {
         owner.ensureOpen();
+        if (skipUnchanged) owner.forgetWrites(key);
         owner.objects().delete(key);
     }
 
@@ -70,7 +79,16 @@ public class S3ItemStorage implements ItemStorage {
             if (committed) return;
             committed = true;
             owner.ensureOpen();
-            owner.objects().put(key, toByteArray(), meta);
+            byte[] data = toByteArray();
+            if (skipUnchanged) {
+                synchronized (owner.writeLock(key)) {
+                    if (owner.unchangedSinceLastWrite(key, data)) return;
+                    owner.objects().put(key, data, meta);
+                    owner.rememberWrite(key, data);
+                }
+            } else {
+                owner.objects().put(key, data, meta);
+            }
             if (onWritten != null) onWritten.run();
         }
     }

@@ -69,7 +69,7 @@ public final class S3MapStorage implements MapStorage {
     @Override
     public ItemStorage settings() {
         // A new map becomes visible in mapIds() as soon as its settings are written.
-        return new S3ItemStorage(owner, layout.settingsKey(mapId), Compression.NONE, kinds.json(), owner::invalidateMapIds);
+        return new S3ItemStorage(owner, layout.settingsKey(mapId), Compression.NONE, kinds.json(), owner::invalidateMapIds, true);
     }
 
     @Override
@@ -80,12 +80,12 @@ public final class S3MapStorage implements MapStorage {
 
     @Override
     public ItemStorage markers() {
-        return new S3ItemStorage(owner, layout.markersKey(mapId), Compression.NONE, kinds.json(), null);
+        return new S3ItemStorage(owner, layout.markersKey(mapId), Compression.NONE, kinds.json(), null, true);
     }
 
     @Override
     public ItemStorage players() {
-        return new S3ItemStorage(owner, layout.playersKey(mapId), Compression.NONE, kinds.json(), null);
+        return new S3ItemStorage(owner, layout.playersKey(mapId), Compression.NONE, kinds.json(), null, true);
     }
 
     @Override
@@ -94,6 +94,7 @@ public final class S3MapStorage implements MapStorage {
         // Remote objects first (cancellable); local state only after everything remote is gone.
         boolean completed = owner.objects().deletePrefix(layout.mapPrefix(mapId), onProgress);
         owner.invalidateMapIds();
+        owner.forgetWrites(layout.mapPrefix(mapId));
         if (completed) renderState.deleteAll();
     }
 

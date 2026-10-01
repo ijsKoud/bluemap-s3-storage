@@ -126,7 +126,15 @@ user. The only visible effect is red entries in the browser's network tab.
 ## Live data (players and markers)
 
 Keep `live-data-root` at its default, so the webapp keeps getting players and markers from BlueMap's own server
-through its live connection. Nothing is written to R2 for this: in `plugin.conf`, `write-players-interval` and
+through its live connection. That feed comes from memory on the Minecraft server, not from storage, and works
+the same with any storage backend.
+
+You will still see a `live/` folder in the bucket. BlueMap writes `live/players.json` (an empty `{}`, to clear old
+data) when a map loads, and `live/markers.json` together with `settings.json` on every map save, about every 15 seconds
+while rendering. These files are not the live feed. The addon skips a write when the content is identical to the last
+one it wrote in this run, so a steady map costs one PUT per file after each restart, not one per save.
+
+Besides that, nothing is written for live data: in `plugin.conf`, `write-players-interval` and
 `write-markers-interval` default to `0`, which means never.
 
 **If you set those intervals above 0, every write is a billable PUT.** A players write every 3 seconds is 28,800
