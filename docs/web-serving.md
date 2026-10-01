@@ -4,7 +4,7 @@ There are two ways to get tiles to the browser. Both work with this addon.
 
 | | A. Through BlueMap's webserver (default) | B. Directly from R2 |
 | --- | --- | --- |
-| Setup | none | custom domain, CORS, two lines in `webapp.conf` |
+| Setup | none | custom domain, CORS, two lines in `webapp.conf` (no cache rule needed) |
 | Tile path | browser, BlueMap webserver, addon, R2 | browser, Cloudflare, R2 |
 | R2 reads | one GET per tile request (Class B) | mostly served from Cloudflare's cache |
 | Server load | every tile request passes through the Minecraft host | none for tiles |
@@ -58,12 +58,18 @@ origins, so the browser needs CORS headers. Bucket, Settings, CORS Policy:
 The origin has to match exactly, including `https://` and without a trailing slash. Custom domains connected to the
 bucket return these headers automatically ([CORS docs](https://developers.cloudflare.com/r2/buckets/cors/)).
 
-### 3. Cache the tiles on Cloudflare
+### 3. Caching (usually nothing to do)
 
-Cloudflare caches only some file types by default, and does not purge an object when it is overwritten.
-Add a Cache Rule for the tiles hostname that makes the responses eligible for cache and respects the
-origin `Cache-Control`. The addon stores `public, max-age=60` on tiles, so a changed tile is visible
-within about a minute. The exact wording of the rule options in the dashboard may differ from this description.
+Cloudflare's [default caching](https://developers.cloudflare.com/cache/concepts/default-cache-behavior/) works by file
+extension, and `.gz` (hires tiles) and `.png` (lowres tiles) are on its list. It also respects the origin
+`Cache-Control` header when it says `public` with a `max-age` above 0, which is what the addon stores on tiles
+(`public, max-age=60`). So tiles are cached on Cloudflare for 60 seconds without any rule. `.json` is not cached by default,
+which suits `settings.json` and `live/*.json`.
+
+A Cache Rule is only needed if you want to change that, for example a longer cache time for tiles. Cloudflare does not
+purge an object when it is overwritten, so a longer cache time means stale tiles for that long. To add one:
+Cloudflare dashboard, select the domain (the zone that contains `tiles.dawnofempires.net`), Caching, Cache Rules, Create rule.
+Match the hostname `tiles.dawnofempires.net`, choose "Eligible for cache" and set the TTL options, then Deploy.
 
 ### 4. Point the webapp at the bucket
 
@@ -160,6 +166,6 @@ and BlueMap serves everything through the addon again. No data moves.
 | --- | --- |
 | Map loads but no tiles, console shows CORS errors | `AllowedOrigins` does not exactly match the webapp origin |
 | Tiles fail with decoding errors | a proxy added `Content-Encoding: gzip`, or `compression` is not `gzip` while `client-decompression` is `true` |
-| Tiles are stale for a long time | a Cache Rule with a long Edge TTL that ignores `Cache-Control`; Cloudflare does not purge overwritten objects |
+| Tiles are stale for a long time | a Cache Rule with a long TTL that overrides `Cache-Control`; Cloudflare does not purge overwritten objects |
 | `403` on every tile | the custom domain is not connected, or public access is off for the bucket |
 | Lowres tiles load, hires do not | `.prbm.gz` is blocked by a WAF or cache rule on the hostname |
