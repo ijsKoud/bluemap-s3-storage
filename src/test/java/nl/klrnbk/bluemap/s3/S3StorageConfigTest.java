@@ -47,8 +47,9 @@ class S3StorageConfigTest {
         assertEquals("public, max-age=60", c.getTileCacheControl());
         assertEquals("no-cache", c.getMetaCacheControl());
         assertEquals(300, c.getListCacheTtlSeconds());
-        assertEquals(15, c.getRequestTimeoutSeconds());
-        assertEquals(5, c.getReadTimeoutSeconds());
+        assertEquals(5, c.getRequestTimeoutSeconds());
+        assertEquals(4, c.getReadTimeoutSeconds());
+        assertEquals(10, c.getReadMaxRetries());
         assertEquals("", c.keyLayout().hiresKey("w", 0, 0).isEmpty() ? "x" : "");
         assertTrue(c.keyLayout().hiresKey("w", 0, 0).startsWith("maps/w/tiles/0/"));
         assertTrue(c.keyLayout().hiresKey("w", 0, 0).endsWith(".prbm"));

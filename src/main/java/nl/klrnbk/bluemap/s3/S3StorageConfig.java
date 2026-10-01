@@ -78,13 +78,21 @@ public class S3StorageConfig extends StorageConfig {
     @Comment("Maximum spool size in bytes; beyond it writes are memory-only (with a warning)")
     private long spoolMaxBytes = 2_147_483_648L;
 
-    @Comment("Timeout of one upload or delete attempt in seconds. A hung attempt is retried on a new connection.")
-    private int requestTimeoutSeconds = 15;
+    @Comment("""
+            Base timeout of one upload or delete attempt in seconds; 1 second per MiB of body is added.
+            A hung attempt is abandoned and retried on a new connection, so keep this close to a few
+            multiples of the normal latency (tens of milliseconds).""")
+    private int requestTimeoutSeconds = 5;
 
     @Comment("""
             Timeout of one read attempt (GET, HEAD, list) in seconds. Reads can block BlueMap render threads
             (e.g. loading a lowres tile), so this is short: a hung read is retried instead of stalling a thread.""")
-    private int readTimeoutSeconds = 5;
+    private int readTimeoutSeconds = 4;
+
+    @Comment("""
+            Retries of a read after the first attempt. Higher than for writes on purpose: when a lowres tile
+            cannot be read, BlueMap continues with an empty tile and overwrites the stored one.""")
+    private int readMaxRetries = 10;
 
     @Comment("Connect timeout in seconds")
     private int connectTimeoutSeconds = 10;
@@ -125,6 +133,7 @@ public class S3StorageConfig extends StorageConfig {
     public long getSpoolMaxBytes() { return spoolMaxBytes; }
     public int getRequestTimeoutSeconds() { return requestTimeoutSeconds; }
     public int getReadTimeoutSeconds() { return readTimeoutSeconds; }
+    public int getReadMaxRetries() { return readMaxRetries; }
     public int getConnectTimeoutSeconds() { return connectTimeoutSeconds; }
     public int getMaxRetries() { return maxRetries; }
     public int getShutdownFlushTimeoutSeconds() { return shutdownFlushTimeoutSeconds; }
@@ -156,6 +165,7 @@ public class S3StorageConfig extends StorageConfig {
         require(readTimeoutSeconds >= 1, "read-timeout-seconds must be >= 1");
         require(connectTimeoutSeconds >= 1, "connect-timeout-seconds must be >= 1");
         require(maxRetries >= 0, "max-retries must be >= 0");
+        require(readMaxRetries >= 0, "read-max-retries must be >= 0");
         require(shutdownFlushTimeoutSeconds >= 0, "shutdown-flush-timeout-seconds must be >= 0");
         require(metricsLogIntervalSeconds >= 0, "metrics-log-interval-seconds must be >= 0");
         require(listCacheTtlSeconds >= 0, "list-cache-ttl-seconds must be >= 0");
@@ -198,7 +208,7 @@ public class S3StorageConfig extends StorageConfig {
     public S3ClientConfig clientConfig() {
         return new S3ClientConfig(endpointUrl, region, bucketName, accessKeyId, secretAccessKey, forcePathStyle,
                 Duration.ofSeconds(connectTimeoutSeconds), Duration.ofSeconds(requestTimeoutSeconds),
-                Duration.ofSeconds(readTimeoutSeconds), maxRetries,
+                Duration.ofSeconds(readTimeoutSeconds), maxRetries, readMaxRetries,
                 maxInFlightRequests, maxRequestsPerSecond, Duration.ofMillis(100), Duration.ofSeconds(10));
     }
 

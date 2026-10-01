@@ -14,17 +14,26 @@ public record S3ClientConfig(
         Duration requestTimeout,
         Duration readTimeout,
         int maxRetries,
+        int readMaxRetries,
         int maxInFlight,
         int maxRequestsPerSecond,
         Duration backoffBase,
         Duration backoffCap) {
 
-    /** Reads use the same timeout as writes. */
+    /** Reads use the same timeout and retry count as writes. */
     public S3ClientConfig(String endpointUrl, String region, String bucket, String accessKeyId, String secretAccessKey,
                           boolean pathStyle, Duration connectTimeout, Duration requestTimeout, int maxRetries,
                           int maxInFlight, int maxRequestsPerSecond, Duration backoffBase, Duration backoffCap) {
         this(endpointUrl, region, bucket, accessKeyId, secretAccessKey, pathStyle, connectTimeout, requestTimeout,
-                requestTimeout, maxRetries, maxInFlight, maxRequestsPerSecond, backoffBase, backoffCap);
+                requestTimeout, maxRetries, maxRetries, maxInFlight, maxRequestsPerSecond, backoffBase, backoffCap);
+    }
+
+    /** Separate read timeout, same retry count. */
+    public S3ClientConfig(String endpointUrl, String region, String bucket, String accessKeyId, String secretAccessKey,
+                          boolean pathStyle, Duration connectTimeout, Duration requestTimeout, Duration readTimeout,
+                          int maxRetries, int maxInFlight, int maxRequestsPerSecond, Duration backoffBase, Duration backoffCap) {
+        this(endpointUrl, region, bucket, accessKeyId, secretAccessKey, pathStyle, connectTimeout, requestTimeout,
+                readTimeout, maxRetries, maxRetries, maxInFlight, maxRequestsPerSecond, backoffBase, backoffCap);
     }
 
     @Override

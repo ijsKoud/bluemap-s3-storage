@@ -251,6 +251,33 @@ class WriteBehindSemanticsTest {
     }
 
     @Test
+    void persistentlyFailingKeysCannotOccupyAllUploadThreads() throws Exception {
+        store.close();
+        store = newStore(8, 1 << 20, 1000, true, 1 << 30); // retry cap = 8 / 8 = 1 concurrent failed op
+        fake.inject(FakeS3.Fault.status(500, "InternalError"), 10_000, r -> r.startsWith("PUT") && r.contains("/bad"));
+        for (int i = 0; i < 6; i++) store.put("bad" + i, b("x"), META);
+        await(() -> store.stats().failedOpsPending() == 6, "all six failed");
+
+        // from now on bad keys hang for 150 ms; only the capped retries may be in flight
+        fake.clearFaults();
+        fake.inject(FakeS3.Fault.hang(150), 10_000, r -> r.startsWith("PUT") && r.contains("/bad"));
+        fake.maxInFlight.set(0);
+        Thread.sleep(1500);
+        assertTrue(fake.maxInFlight.get() <= 1, "failed ops retried in parallel: " + fake.maxInFlight.get());
+
+        // healthy uploads are not starved by the failing ones
+        long t0 = System.nanoTime();
+        store.put("healthy", b("ok"), META);
+        await(() -> fake.objects.containsKey("healthy"), "healthy upload");
+        assertTrue((System.nanoTime() - t0) / 1_000_000 < 1000);
+
+        // when the bucket recovers they all arrive
+        fake.clearFaults();
+        await(() -> store.pendingKeys() == 0, "recovery");
+        for (int i = 0; i < 6; i++) assertArrayEquals(b("x"), fake.data("bad" + i));
+    }
+
+    @Test
     void deletePrefixDiscardsPendingOpsAndRemovesRemoteObjects() throws Exception {
         fake.objects.put("m/old1", new FakeS3.StoredObject(b("1"), null, null));
         fake.objects.put("m/old2", new FakeS3.StoredObject(b("2"), null, null));

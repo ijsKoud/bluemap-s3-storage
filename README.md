@@ -55,18 +55,25 @@ Upload threads mostly wait on the network and use little CPU. The upload rate is
 requests/s. If BlueMap produces far fewer writes than that, the default 16 is already enough.
 Restart BlueMap after changing either file.
 
-## Timeouts
+## Timeouts and retries
 
 ```hocon
-request-timeout-seconds: 15   # one upload or delete attempt (default 15)
-read-timeout-seconds: 5       # one read attempt: GET, HEAD, list (default 5)
+request-timeout-seconds: 5    # base timeout of one upload/delete attempt; 1 s per MiB of body is added (default 5)
+read-timeout-seconds: 4       # one read attempt: GET, HEAD, list (default 4)
 connect-timeout-seconds: 10
-max-retries: 5
+max-retries: 5                # retries of a write after the first attempt
+read-max-retries: 10          # retries of a read after the first attempt
 ```
 
-Reads are kept short on purpose: BlueMap loads lowres tiles synchronously on a render thread when they are
-not in its small cache, so a hung read would stall that render thread. A hung attempt is abandoned and
-retried on a new connection instead.
+Normal requests take tens of milliseconds, so a request that has not answered after a few seconds is
+hung. It is abandoned and retried on a new connection instead of holding a thread for a long time.
+
+Reads retry more often than writes on purpose: BlueMap loads lowres tiles synchronously on a render
+thread, and when that read fails it continues with an empty tile and overwrites the stored one.
+
+Writes that still fail after all retries stay in the spool and are retried with exponential backoff
+(30 s, 60 s, ... up to 10 minutes). At most `upload-threads / 8` of those retries run at once, so a few keys
+that keep hanging cannot occupy the whole upload pool.
 
 ## Reading the metrics line
 

@@ -151,6 +151,37 @@ class S3ClientContractTest {
     }
 
     @Test
+    void writeTimeoutGrowsWithBodySize() throws Exception {
+        var cfg = fake.config(0, 4, 1000);
+        try (S3Client c = new S3Client(new S3ClientConfig(cfg.endpointUrl(), cfg.region(), cfg.bucket(), cfg.accessKeyId(),
+                cfg.secretAccessKey(), true, cfg.connectTimeout(), Duration.ofSeconds(1), 0, 4, 1000,
+                cfg.backoffBase(), cfg.backoffCap()), new S3Metrics())) {
+            fake.latencyMillis = 1500; // slower than the 1 s base timeout
+            assertThrows(S3Exception.class, () -> c.put("small", new byte[10], "a/b", null));
+            assertEquals(1, c.metrics().timeouts());
+            c.put("big", new byte[2 << 20], "a/b", null); // 1 s + 2 s allowed for 2 MiB, so 1.5 s is fine
+            assertEquals(2 << 20, fake.data("big").length);
+            assertEquals(1, c.metrics().timeouts());
+        }
+    }
+
+    @Test
+    void readsRetryMoreOftenThanWrites() throws Exception {
+        var cfg = fake.config(1, 4, 1000);
+        try (S3Client c = new S3Client(new S3ClientConfig(cfg.endpointUrl(), cfg.region(), cfg.bucket(), cfg.accessKeyId(),
+                cfg.secretAccessKey(), true, cfg.connectTimeout(), Duration.ofSeconds(5), Duration.ofMillis(200), 1, 6, 4, 1000,
+                cfg.backoffBase(), cfg.backoffCap()), new S3Metrics())) {
+            fake.objects.put("k", new FakeS3.StoredObject(bytes("v"), null, null));
+            fake.inject(FakeS3.Fault.hang(1000), 5, r -> r.startsWith("GET"));
+            assertArrayEquals(bytes("v"), c.get("k")); // 5 hung attempts, 6th succeeds (read-max-retries 6)
+            assertEquals(5, c.metrics().timeouts());
+            fake.inject(FakeS3.Fault.status(500, "InternalError"), 10, r -> r.startsWith("PUT"));
+            assertThrows(S3Exception.class, () -> c.put("w", bytes("x"), "a/b", null));
+            assertEquals(2, fake.log.stream().filter(l -> l.startsWith("PUT")).count(), "writes use max-retries 1");
+        }
+    }
+
+    @Test
     void listPaginatesAndSupportsDelimiter() throws IOException {
         for (int i = 0; i < 25; i++) fake.objects.put(String.format("root/w/tiles/0/k%02d", i), new FakeS3.StoredObject(new byte[1], null, null));
         fake.objects.put("root/w/settings.json", new FakeS3.StoredObject(new byte[1], null, null));

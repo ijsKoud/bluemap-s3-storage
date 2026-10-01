@@ -192,7 +192,11 @@ public final class S3Client implements AutoCloseable {
         if (key.isEmpty() && pathPrefix.isEmpty()) canonicalPath = "/";
 
         S3Exception last = null;
-        for (int attempt = 0; attempt <= config.maxRetries(); attempt++) {
+        int maxRetries = kind == RequestGate.Kind.READ ? config.readMaxRetries() : config.maxRetries();
+        // Writes get the base timeout plus time for the body at a pessimistic 1 MiB/s, so big tiles are not cut off.
+        java.time.Duration timeout = kind == RequestGate.Kind.READ ? config.readTimeout()
+                : config.requestTimeout().plusMillis(payload.length * 1000L / (1 << 20));
+        for (int attempt = 0; attempt <= maxRetries; attempt++) {
             if (attempt > 0) {
                 metrics.retry();
                 sleepBackoff(attempt);
@@ -205,7 +209,7 @@ public final class S3Client implements AutoCloseable {
             }
             try {
                 HttpRequest request = buildRequest(method, canonicalPath, query, payload, payloadHash, extraHeaders, body != null,
-                        kind == RequestGate.Kind.READ ? config.readTimeout() : config.requestTimeout());
+                        timeout);
                 HttpResponse<byte[]> response = http.send(request, HttpResponse.BodyHandlers.ofByteArray());
                 int status = response.statusCode();
                 byte[] responseBody = response.body();
@@ -235,7 +239,7 @@ public final class S3Client implements AutoCloseable {
             }
         }
         S3Exception exhausted = new S3Exception(last.status(), last.code(),
-                last.getMessage() + " (gave up after " + (config.maxRetries() + 1) + " attempts)");
+                last.getMessage() + " (gave up after " + (maxRetries + 1) + " attempts)");
         exhausted.initCause(last.getCause());
         throw exhausted;
     }

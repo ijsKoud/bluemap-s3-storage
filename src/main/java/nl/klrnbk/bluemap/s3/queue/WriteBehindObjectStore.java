@@ -56,6 +56,8 @@ public final class WriteBehindObjectStore implements ObjectStore {
     private final AtomicLong sequence = new AtomicLong(1);
     private final AtomicInteger activeEnqueues = new AtomicInteger();
     private final AtomicInteger uploadsInFlight = new AtomicInteger();
+    /** Failed ops currently being retried; capped so persistently failing keys cannot occupy all upload threads. */
+    private final AtomicInteger failedRetriesInFlight = new AtomicInteger();
     private final LongAdder uploadsCompleted = new LongAdder();
     private final LongAdder coalesced = new LongAdder();
     private final LongAdder failedUploads = new LongAdder();
@@ -85,8 +87,8 @@ public final class WriteBehindObjectStore implements ObjectStore {
             t.setDaemon(true);
             return t;
         });
-        long retryMillis = Math.max(10, config.failedRetryInterval().toMillis());
-        maintenance.scheduleWithFixedDelay(this::retryFailed, retryMillis, retryMillis, TimeUnit.MILLISECONDS);
+        long tickMillis = Math.max(10, config.failedRetryInterval().toMillis() / 4);
+        maintenance.scheduleWithFixedDelay(this::retryFailed, tickMillis, tickMillis, TimeUnit.MILLISECONDS);
 
         if (spool != null) replaySpool(); // workers are already running, so a large spool can drain through the buffer
     }
@@ -142,6 +144,7 @@ public final class WriteBehindObjectStore implements ObjectStore {
 
     /** Releases buffer accounting and the spool file of an op that will never be uploaded, or was. */
     private void discard(PendingOp op) {
+        endRetry(op);
         if (op.accounted) {
             op.accounted = false;
             limiter.release(op.size);
@@ -237,6 +240,9 @@ public final class WriteBehindObjectStore implements ObjectStore {
         } else if (!stillLatest[0]) {
             discard(op); // superseded by a newer op, which carries the state that matters
         } else if (!stopping) {
+            endRetry(op);
+            op.failures++;
+            op.nextRetryNanos = System.nanoTime() + retryBackoffNanos(op.failures);
             failedUploads.increment();
             failedKeys.add(op.key);
             failureLog.warn("S3 upload failed for '" + op.key + "': " + describe(error) + "; kept "
@@ -254,11 +260,32 @@ public final class WriteBehindObjectStore implements ObjectStore {
         }
     }
 
+    private void endRetry(PendingOp op) {
+        if (op.retryScheduled.compareAndSet(true, false)) failedRetriesInFlight.decrementAndGet();
+    }
+
+    /** The n-th retry of a failed op waits interval * 2^(n-1), at most 20 intervals (10 minutes by default). */
+    private long retryBackoffNanos(int failures) {
+        long interval = config.failedRetryInterval().toNanos();
+        return Math.min(interval << Math.min(failures - 1, 6), interval * 20);
+    }
+
+    /**
+     * Re-queues failed ops whose backoff has elapsed, but never more than a small share of the upload threads
+     * at once. A key that hangs holds a thread for all its attempts; without this cap a few bad keys retried
+     * every interval would occupy the whole pool and starve healthy uploads.
+     */
     private void retryFailed() {
         try {
+            int cap = Math.max(1, config.uploadThreads() / 8);
+            long now = System.nanoTime();
             for (String key : failedKeys) {
+                if (failedRetriesInFlight.get() >= cap) return;
                 states.computeIfPresent(key, (k, st) -> {
-                    if (st.latest != null && st.uploading == null && !st.queued) {
+                    PendingOp latest = st.latest;
+                    if (latest != null && st.uploading == null && !st.queued && now - latest.nextRetryNanos >= 0
+                            && latest.retryScheduled.compareAndSet(false, true)) {
+                        failedRetriesInFlight.incrementAndGet();
                         st.queued = true;
                         workQueue.add(k);
                     }

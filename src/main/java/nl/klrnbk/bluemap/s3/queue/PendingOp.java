@@ -3,6 +3,7 @@ package nl.klrnbk.bluemap.s3.queue;
 import nl.klrnbk.bluemap.s3.storage.ObjectMeta;
 
 import java.nio.file.Path;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** One not yet completed write or delete of a key. Identity matters: completion compares by reference. */
 final class PendingOp {
@@ -21,6 +22,11 @@ final class PendingOp {
     /** Spool file holding this op, or null if it is memory-only. */
     volatile Path spoolFile;
     volatile long spoolSize;
+    /** Number of times this op exhausted its retries; drives the backoff of the periodic retry. */
+    volatile int failures;
+    volatile long nextRetryNanos;
+    /** True while this op counts against the limit of concurrently retried failed ops. */
+    final AtomicBoolean retryScheduled = new AtomicBoolean();
     /** True while this op holds write buffer accounting. */
     volatile boolean accounted;
 
