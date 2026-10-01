@@ -35,6 +35,7 @@ public final class S3Client implements AutoCloseable {
 
     private static final Set<Integer> RETRYABLE_STATUS = Set.of(429, 500, 502, 503, 504);
     private static final Pattern CODE = Pattern.compile("<Code>([^<]{1,100})</Code>");
+    private static final Pattern MESSAGE = Pattern.compile("<Message>([^<]{0,400})</Message>");
     private static final String EMPTY_SHA256 = SigV4Signer.sha256Hex(new byte[0]);
 
     private final S3ClientConfig config;
@@ -218,7 +219,8 @@ public final class S3Client implements AutoCloseable {
                 if (status == 404 && !"NoSuchBucket".equals(code) && (method.equals("GET") || method.equals("HEAD") || method.equals("DELETE"))) {
                     return new Response(404, null);
                 }
-                S3Exception ex = new S3Exception(status, code, describe(method, key, status, code));
+                S3Exception ex = new S3Exception(status, code,
+                        describe(method, key, query, status, code, errorMessage(responseBody)));
                 if (RETRYABLE_STATUS.contains(status) || "SlowDown".equals(code)) {
                     last = ex;
                     continue;
@@ -289,8 +291,12 @@ public final class S3Client implements AutoCloseable {
 
     // ---- helpers ----
 
-    private static String describe(String method, String key, int status, String code) {
-        return method + " " + shorten(key) + " -> HTTP " + status + (code == null ? "" : " " + code);
+    private String describe(String method, String key, Map<String, String> query, int status, String code, String message) {
+        String target = key.isEmpty()
+                ? "bucket '" + config.bucket() + "'" + (query.containsKey("list-type") ? " (list prefix '" + shorten(query.getOrDefault("prefix", "")) + "')" : "")
+                : shorten(key);
+        return method + " " + target + " -> HTTP " + status + (code == null ? "" : " " + code)
+                + (message == null ? "" : ": " + message);
     }
 
     private static String shorten(String key) {
@@ -302,6 +308,16 @@ public final class S3Client implements AutoCloseable {
         String head = new String(body, 0, Math.min(body.length, 4096), StandardCharsets.UTF_8);
         Matcher m = CODE.matcher(head);
         return m.find() ? m.group(1) : null;
+    }
+
+    /** The human readable message the server put in its error body (never credentials), shortened. */
+    static String errorMessage(byte[] body) {
+        if (body == null || body.length == 0) return null;
+        String head = new String(body, 0, Math.min(body.length, 4096), StandardCharsets.UTF_8);
+        Matcher m = MESSAGE.matcher(head);
+        if (!m.find()) return null;
+        String msg = m.group(1).replaceAll("\\s+", " ").trim();
+        return msg.isEmpty() ? null : (msg.length() > 200 ? msg.substring(0, 200) + "..." : msg);
     }
 
     static String xmlEscape(String s) {

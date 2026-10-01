@@ -69,6 +69,16 @@ class S3ClientContractTest {
     }
 
     @Test
+    void errorMessagesNameTheOperationAndCarryTheServerMessage() {
+        fake.inject(FakeS3.Fault.status(403, "AccessDenied"), 1);
+        S3Exception e = assertThrows(S3Exception.class, () -> client.list("some/prefix/", "/", null, 1));
+        assertEquals("GET bucket 'test-bucket' (list prefix 'some/prefix/') -> HTTP 403 AccessDenied: injected", e.getMessage());
+        fake.inject(FakeS3.Fault.status(403, "AccessDenied"), 1);
+        e = assertThrows(S3Exception.class, () -> client.get("a/key"));
+        assertEquals("GET a/key -> HTTP 403 AccessDenied: injected", e.getMessage());
+    }
+
+    @Test
     void missingBucketIsAnErrorNotNull() {
         var cfg = fake.config(0, 4, 1000);
         S3Client other = new S3Client(new S3ClientConfig(cfg.endpointUrl(), cfg.region(), "other-bucket", cfg.accessKeyId(),
